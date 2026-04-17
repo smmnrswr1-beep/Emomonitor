@@ -118,9 +118,10 @@ textarea::placeholder { color: #b0bec8; font-weight: 600; }
 .time-opt-icon { font-size: 20px; margin-bottom: 4px; }
 .time-opt-label { font-size: 12px; font-weight: 800; color: var(--muted); }
 .time-opt.selected .time-opt-label { color: var(--navy); }
-input[type=time] { width: 100%; margin-top: 12px; border: 2px solid var(--border); border-radius: 12px; padding: 12px 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; font-size: 15px; font-weight: 800; color: var(--navy); background: white; outline: none; display: none; text-align: center; }
-input[type=time].show { display: block; }
-input[type=time]:focus { border-color: var(--navy); }
+input[type=time], input[type=date] { width: 100%; margin-top: 12px; border: 2px solid var(--border); border-radius: 12px; padding: 12px 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; font-size: 15px; font-weight: 800; color: var(--navy); background: white; outline: none; display: none; text-align: center; }
+input[type=time].show, input[type=date].show { display: block; }
+input[type=time]:focus, input[type=date]:focus { border-color: var(--navy); }
+.date-divider { height: 1px; background: var(--border); margin: 14px 0; }
 
 /* SUCCESS */
 .success-screen { display: none; padding: 36px 24px 40px; text-align: center; animation: slideIn 0.4s cubic-bezier(0.34,1.56,0.64,1); }
@@ -251,8 +252,8 @@ canvas#chart { display: block; width: 100%; touch-action: none; }
 
     <!-- STEP 1: HORA -->
     <div class="step-card active" id="step0">
-      <div class="step-question">¿A qué hora es este momento?</div>
-      <div class="step-sub">Usamos la hora actual por defecto. Cámbiala si el registro es de un momento anterior.</div>
+      <div class="step-question">¿Cuándo ocurrió esto?</div>
+      <div class="step-sub">Puedes registrar un momento pasado: cambia la fecha y la hora si no es de ahorita.</div>
       <div class="time-card">
         <div class="time-big" id="timeBig">—</div>
         <div class="time-toggle">
@@ -266,6 +267,18 @@ canvas#chart { display: block; width: 100%; touch-action: none; }
           </div>
         </div>
         <input type="time" id="timePicker" onchange="onManualTime(this.value)">
+        <div class="date-divider"></div>
+        <div class="time-toggle">
+          <div class="time-opt selected" id="optToday" onclick="selectDateMode('today')">
+            <div class="time-opt-icon">📅</div>
+            <div class="time-opt-label">Hoy</div>
+          </div>
+          <div class="time-opt" id="optOtherDay" onclick="selectDateMode('otherday')">
+            <div class="time-opt-icon">📆</div>
+            <div class="time-opt-label">Otro día</div>
+          </div>
+        </div>
+        <input type="date" id="datePicker" onchange="onDateChange(this.value)">
       </div>
       <div class="step-nav">
         <button class="btn-next" onclick="goStep(1)">Siguiente →</button>
@@ -329,7 +342,7 @@ canvas#chart { display: block; width: 100%; touch-action: none; }
         <div class="stat-pill-val" style="color:var(--amber)" id="successA">—</div>
       </div>
       <div class="stat-pill">
-        <div class="stat-pill-label">Total hoy</div>
+        <div class="stat-pill-label">Total del día</div>
         <div class="stat-pill-val" id="successCount">—</div>
       </div>
     </div>
@@ -422,6 +435,7 @@ let data = loadData();
 // ── STATE ─────────────────────────────────────────────────────────────
 let currentStep = 0, valT = null, valA = null;
 let selectedTime = null, timeMode = 'now';
+let selectedDate = null, dateMode = 'today';
 let currentDateOffset = 0;
 let currentTooltipId = null, pendingDeleteId = null;
 
@@ -497,7 +511,25 @@ function goStep(n) {
 
 // ── TIME ──────────────────────────────────────────────────────────────
 function fmt2(n) { return String(n).padStart(2,'0'); }
-function initTimeStep() { selectTimeMode('now'); }
+function initTimeStep() {
+  const dp = document.getElementById('datePicker');
+  dp.max = todayStr();
+  selectDateMode('today');
+  selectTimeMode('now');
+}
+function selectDateMode(mode) {
+  dateMode = mode;
+  document.getElementById('optToday').classList.toggle('selected', mode==='today');
+  document.getElementById('optOtherDay').classList.toggle('selected', mode==='otherday');
+  document.getElementById('datePicker').classList.toggle('show', mode==='otherday');
+  if (mode === 'today') {
+    selectedDate = todayStr();
+  } else {
+    const v = document.getElementById('datePicker').value;
+    selectedDate = v || null;
+  }
+}
+function onDateChange(v) { selectedDate = v || null; }
 function selectTimeMode(mode) {
   timeMode = mode;
   document.getElementById('optNow').classList.toggle('selected', mode==='now');
@@ -519,7 +551,8 @@ function onManualTime(v) { selectedTime = v; document.getElementById('timeBig').
 // ── SAVE ──────────────────────────────────────────────────────────────
 function saveEntry() {
   if (!selectedTime) { showToast('⏱ Elige una hora'); return; }
-  const entry = { id: Date.now(), date: todayStr(), time: selectedTime, t: valT, a: valA, obsT: document.getElementById('obsT').value.trim(), obsA: document.getElementById('obsA').value.trim() };
+  if (!selectedDate) { showToast('📅 Elige una fecha'); return; }
+  const entry = { id: Date.now(), date: selectedDate, time: selectedTime, t: valT, a: valA, obsT: document.getElementById('obsT').value.trim(), obsA: document.getElementById('obsA').value.trim() };
   data.push(entry);
   saveData(data);
   updateStreak();
@@ -532,7 +565,7 @@ function showSuccess(entry) {
   ss.classList.add('show');
   document.getElementById('successT').textContent = entry.t;
   document.getElementById('successA').textContent = entry.a;
-  document.getElementById('successCount').textContent = data.filter(e=>e.date===todayStr()).length;
+  document.getElementById('successCount').textContent = data.filter(e=>e.date===entry.date).length;
   const streak = getStreak();
   if (streak >= 2) {
     document.getElementById('streakCelebrate').style.display = 'flex';
@@ -558,6 +591,7 @@ function newEntry() {
     document.getElementById('btnNext'+t).disabled=true;
   });
   document.getElementById('timePicker').value='';
+  document.getElementById('datePicker').value='';
   document.getElementById('streakCelebrate').style.display='none';
   document.querySelectorAll('.step-card').forEach(c=>c.classList.remove('active'));
   document.querySelectorAll('.step-dot').forEach(d=>d.classList.remove('active','done'));
